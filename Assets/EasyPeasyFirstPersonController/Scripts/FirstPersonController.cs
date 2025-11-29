@@ -21,45 +21,62 @@ namespace EasyPeasyFirstPersonController
         [Range(0f, 50f)] public float gravity = 9.81f;
         public bool coyoteTimeEnabled = true;
         [Range(0.01f, 0.3f)] public float coyoteTimeDuration = 0.2f;
+
         public float normalFov = 60f;
         public float sprintFov = 70f;
+        public float aimFov = 20f;
         public float fovChangeSpeed = 5f;
+
         public float walkingBobbingSpeed = 10f;
         public float bobbingAmount = 0.05f;
         private float sprintBobMultiplier = 1.5f;
         private float recoilReturnSpeed = 8f;
+
         public bool canSlide = true;
         public bool canJump = true;
         public bool canSprint = true;
         public bool canCrouch = true;
+
         public QueryTriggerInteraction ceilingCheckQueryTriggerInteraction = QueryTriggerInteraction.Ignore;
         public QueryTriggerInteraction groundCheckQueryTriggerInteraction = QueryTriggerInteraction.Ignore;
+
         public Transform groundCheck;
         public float groundDistance = 0.2f;
         public LayerMask groundMask;
+
         public Transform playerCamera;
         public Transform cameraParent;
+
         private float rotX, rotY;
         private float xVelocity, yVelocity;
+
         private CharacterController characterController;
         private Vector3 moveDirection = Vector3.zero;
+
         private bool isGrounded;
         private Vector2 moveInput;
+
         public bool isSprinting;
         public bool isCrouching;
         public bool isSliding;
+
         private float slideTimer;
         private float postSlideCrouchTimer;
         private Vector3 slideDirection;
+
         private float originalHeight;
         private float originalCameraParentHeight;
         private float coyoteTimer;
+
         private Camera cam;
         private AudioSource slideAudioSource;
+
         private float bobTimer;
         private float defaultPosY;
         private Vector3 recoil = Vector3.zero;
+
         private bool isLook = true, isMove = true;
+
         private float currentCameraHeight;
         private float currentBobOffset;
         private float currentFov;
@@ -69,19 +86,31 @@ namespace EasyPeasyFirstPersonController
         private float currentTiltAngle;
         private float tiltVelocity;
 
+        private bool isAiming = false;
+        private bool isCursorLocked = true;
+        private float originalMouseSensitivity;
+
         public float CurrentCameraHeight => isCrouching || isSliding ? crouchCameraHeight : originalCameraParentHeight;
+
+        public static Action OnPressAim;
+        public static Action OnReleaseAim;
 
         private void Awake()
         {
             characterController = GetComponent<CharacterController>();
             cam = playerCamera.GetComponent<Camera>();
+
             originalHeight = characterController.height;
             originalCameraParentHeight = cameraParent.localPosition.y;
             defaultPosY = cameraParent.localPosition.y;
+
             slideAudioSource = gameObject.AddComponent<AudioSource>();
             slideAudioSource.playOnAwake = false;
             slideAudioSource.loop = false;
+
             Cursor.lockState = CursorLockMode.Locked;
+            isCursorLocked = true;
+
             currentCameraHeight = originalCameraParentHeight;
             currentBobOffset = 0f;
             currentFov = normalFov;
@@ -90,13 +119,19 @@ namespace EasyPeasyFirstPersonController
 
             rotX = transform.rotation.eulerAngles.y;
             rotY = playerCamera.localRotation.eulerAngles.x;
+
             xVelocity = rotX;
             yVelocity = rotY;
+
+            originalMouseSensitivity = mouseSensitivity;
         }
 
         private void Update()
         {
+            CheckCursorState();
+
             isGrounded = Physics.CheckSphere(groundCheck.position, groundDistance, groundMask, groundCheckQueryTriggerInteraction);
+
             if (isGrounded && moveDirection.y < 0)
             {
                 moveDirection.y = -2f;
@@ -107,7 +142,7 @@ namespace EasyPeasyFirstPersonController
                 coyoteTimer -= Time.deltaTime;
             }
 
-            if (isLook)
+            if (isLook && isCursorLocked)
             {
                 float mouseX = Input.GetAxis("Mouse X") * 10 * mouseSensitivity * Time.deltaTime;
                 float mouseY = Input.GetAxis("Mouse Y") * 10 * mouseSensitivity * Time.deltaTime;
@@ -121,22 +156,38 @@ namespace EasyPeasyFirstPersonController
 
                 float targetTiltAngle = isSliding ? slideTiltAngle : 0f;
                 currentTiltAngle = Mathf.SmoothDamp(currentTiltAngle, targetTiltAngle, ref tiltVelocity, 0.2f);
+
                 playerCamera.transform.localRotation = Quaternion.Euler(yVelocity - currentTiltAngle, 0f, 0f);
                 transform.rotation = Quaternion.Euler(0f, xVelocity, 0f);
+            }
+
+            if (Input.GetMouseButtonDown(1))
+            {
+                isAiming = true;
+                mouseSensitivity = originalMouseSensitivity / 2;
+                OnPressAim?.Invoke();
+            }
+            if (Input.GetMouseButtonUp(1))
+            {
+                isAiming = false;
+                mouseSensitivity = originalMouseSensitivity;
+                OnReleaseAim?.Invoke();
             }
 
             HandleHeadBob();
 
             bool wantsToCrouch = canCrouch && Input.GetKey(KeyCode.LeftControl) && !isSliding;
+
             Vector3 point1 = transform.position + characterController.center - Vector3.up * (characterController.height * 0.5f);
             Vector3 point2 = point1 + Vector3.up * characterController.height * 0.6f;
+
             float capsuleRadius = characterController.radius * 0.95f;
             float castDistance = isSliding ? originalHeight + 0.2f : originalHeight - crouchHeight + 0.2f;
+
             bool hasCeiling = Physics.CapsuleCast(point1, point2, capsuleRadius, Vector3.up, castDistance, groundMask, ceilingCheckQueryTriggerInteraction);
-            if (isSliding)
-            {
-                postSlideCrouchTimer = 0.3f;
-            }
+
+            if (isSliding) postSlideCrouchTimer = 0.3f;
+
             if (postSlideCrouchTimer > 0)
             {
                 postSlideCrouchTimer -= Time.deltaTime;
@@ -151,20 +202,25 @@ namespace EasyPeasyFirstPersonController
             {
                 isSliding = true;
                 slideTimer = slideDuration;
-                slideDirection = moveInput.magnitude > 0.1f ? (transform.right * moveInput.x + transform.forward * moveInput.y).normalized : transform.forward;
+                slideDirection = moveInput.magnitude > 0.1f ?
+                    (transform.right * moveInput.x + transform.forward * moveInput.y).normalized :
+                    transform.forward;
+
                 currentSlideSpeed = sprintSpeed;
             }
 
             float slideProgress = slideTimer / slideDuration;
+
             if (isSliding)
             {
                 slideTimer -= Time.deltaTime;
+
                 if (slideTimer <= 0f || !isGrounded)
-                {
                     isSliding = false;
-                }
+
                 float targetSlideSpeed = slideSpeed * Mathf.Lerp(0.7f, 1f, slideProgress);
                 currentSlideSpeed = Mathf.SmoothDamp(currentSlideSpeed, targetSlideSpeed, ref slideSpeedVelocity, 0.2f);
+
                 characterController.Move(slideDirection * currentSlideSpeed * Time.deltaTime);
             }
 
@@ -172,11 +228,33 @@ namespace EasyPeasyFirstPersonController
             characterController.height = Mathf.Lerp(characterController.height, targetHeight, Time.deltaTime * 10f);
             characterController.center = new Vector3(0f, characterController.height * 0.5f, 0f);
 
-            float targetFov = isSprinting ? sprintFov : (isSliding ? sprintFov + (slideFovBoost * Mathf.Lerp(0f, 1f, 1f - slideProgress)) : normalFov);
+            float targetFov;
+
+            if (isAiming)
+                targetFov = aimFov;
+            else if (isSprinting)
+                targetFov = sprintFov;
+            else if (isSliding)
+                targetFov = sprintFov + (slideFovBoost * Mathf.Lerp(0f, 1f, 1f - slideProgress));
+            else
+                targetFov = normalFov;
+
             currentFov = Mathf.SmoothDamp(currentFov, targetFov, ref fovVelocity, 1f / fovChangeSpeed);
             cam.fieldOfView = currentFov;
 
             HandleMovement();
+        }
+
+        private void CheckCursorState()
+        {
+            bool wasLocked = isCursorLocked;
+            isCursorLocked = Cursor.lockState == CursorLockMode.Locked;
+
+            if (wasLocked && !isCursorLocked)
+            {
+                rotX = xVelocity;
+                rotY = yVelocity;
+            }
         }
 
         private void HandleHeadBob()
@@ -190,14 +268,18 @@ namespace EasyPeasyFirstPersonController
             if (!isGrounded || isSliding || isCrouching)
             {
                 bobTimer = 0f;
-                float targetCameraHeight = isCrouching || isSliding ? crouchCameraHeight : originalCameraParentHeight;
+
+                float targetCameraHeight = (isCrouching || isSliding) ? crouchCameraHeight : originalCameraParentHeight;
                 currentCameraHeight = Mathf.Lerp(currentCameraHeight, targetCameraHeight, Time.deltaTime * 10f);
+
                 cameraParent.localPosition = new Vector3(
                     cameraParent.localPosition.x,
                     currentCameraHeight + currentBobOffset,
                     cameraParent.localPosition.z);
+
                 recoil = Vector3.zero;
                 cameraParent.localRotation = Quaternion.RotateTowards(cameraParent.localRotation, Quaternion.Euler(recoil), recoilReturnSpeed * Time.deltaTime);
+
                 return;
             }
 
@@ -205,23 +287,29 @@ namespace EasyPeasyFirstPersonController
             {
                 float bobSpeed = walkingBobbingSpeed * (isSprinting ? sprintBobMultiplier : 1f);
                 bobTimer += Time.deltaTime * bobSpeed;
-                float targetCameraHeight = isCrouching || isSliding ? crouchCameraHeight : originalCameraParentHeight;
+
+                float targetCameraHeight = (isCrouching || isSliding) ? crouchCameraHeight : originalCameraParentHeight;
                 currentCameraHeight = Mathf.Lerp(currentCameraHeight, targetCameraHeight, Time.deltaTime * 10f);
+
                 cameraParent.localPosition = new Vector3(
                     cameraParent.localPosition.x,
                     currentCameraHeight + currentBobOffset,
                     cameraParent.localPosition.z);
+
                 recoil.z = moveInput.x * -2f;
             }
             else
             {
                 bobTimer = 0f;
-                float targetCameraHeight = isCrouching || isSliding ? crouchCameraHeight : originalCameraParentHeight;
+
+                float targetCameraHeight = (isCrouching || isSliding) ? crouchCameraHeight : originalCameraParentHeight;
                 currentCameraHeight = Mathf.Lerp(currentCameraHeight, targetCameraHeight, Time.deltaTime * 10f);
+
                 cameraParent.localPosition = new Vector3(
                     cameraParent.localPosition.x,
                     currentCameraHeight + currentBobOffset,
                     cameraParent.localPosition.z);
+
                 recoil = Vector3.zero;
             }
 
@@ -232,7 +320,13 @@ namespace EasyPeasyFirstPersonController
         {
             moveInput.x = Input.GetAxis("Horizontal");
             moveInput.y = Input.GetAxis("Vertical");
-            isSprinting = canSprint && Input.GetKey(KeyCode.LeftShift) && moveInput.y > 0.1f && isGrounded && !isCrouching && !isSliding;
+
+            isSprinting = canSprint &&
+                          Input.GetKey(KeyCode.LeftShift) &&
+                          moveInput.y > 0.1f &&
+                          isGrounded &&
+                          !isCrouching &&
+                          !isSliding;
 
             float currentSpeed = isCrouching ? crouchSpeed : (isSprinting ? sprintSpeed : walkSpeed);
             if (!isMove) currentSpeed = 0f;
@@ -244,13 +338,9 @@ namespace EasyPeasyFirstPersonController
             if (isGrounded || coyoteTimer > 0f)
             {
                 if (canJump && Input.GetKeyDown(KeyCode.Space) && !isSliding)
-                {
                     moveDirection.y = jumpSpeed;
-                }
                 else if (moveDirection.y < 0)
-                {
                     moveDirection.y = -2f;
-                }
             }
             else
             {
@@ -284,6 +374,7 @@ namespace EasyPeasyFirstPersonController
         {
             Cursor.lockState = newVisibility ? CursorLockMode.None : CursorLockMode.Locked;
             Cursor.visible = newVisibility;
+            isCursorLocked = !newVisibility;
         }
     }
 }

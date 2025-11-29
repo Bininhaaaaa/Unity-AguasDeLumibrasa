@@ -21,12 +21,9 @@ public class UI_GameTimer : MonoBehaviour
     private void SubtractTime()
     {
         // iff current time bigger than 5, set timer to 5 seconds remainng and pop timer text in scale, this gameobject
-        if (currentTime > 5)
+        if (currentTime > 1)
         {
-            currentTime = 6;
-            // pop animation
-
-
+            currentTime = 1; // pop animation            
         }
     }
 
