@@ -37,6 +37,16 @@ namespace EasyPeasyFirstPersonController
         public bool canSprint = true;
         public bool canCrouch = true;
 
+        // --- STAMINA SETTINGS ---
+        [Header("Stamina System")]
+        [Range(0, 100)] public float maxStamina = 100f;
+        public float staminaDrainRate = 15f; // Quanto gasta por segundo
+        public float staminaRegenRate = 10f; // Quanto recupera por segundo
+        public float staminaRegenDelay = 1.0f; // Tempo de espera para começar a recuperar
+        [HideInInspector] public float currentStamina;
+        private float lastSprintTime;
+        // ------------------------
+
         public QueryTriggerInteraction ceilingCheckQueryTriggerInteraction = QueryTriggerInteraction.Ignore;
         public QueryTriggerInteraction groundCheckQueryTriggerInteraction = QueryTriggerInteraction.Ignore;
 
@@ -95,6 +105,9 @@ namespace EasyPeasyFirstPersonController
         public static Action OnPressAim;
         public static Action OnReleaseAim;
 
+        public static Action OnPressTab;
+        public static Action OnReleaseTab;
+
         private void Awake()
         {
             characterController = GetComponent<CharacterController>();
@@ -124,6 +137,9 @@ namespace EasyPeasyFirstPersonController
             yVelocity = rotY;
 
             originalMouseSensitivity = mouseSensitivity;
+
+            // Inicializa Stamina cheia
+            currentStamina = maxStamina;
         }
 
         private void Update()
@@ -172,6 +188,14 @@ namespace EasyPeasyFirstPersonController
                 isAiming = false;
                 mouseSensitivity = originalMouseSensitivity;
                 OnReleaseAim?.Invoke();
+            }
+            if (Input.GetKeyDown(KeyCode.Tab))
+            {
+                OnPressTab?.Invoke();
+            }
+            if (Input.GetKeyUp(KeyCode.Tab))
+            {
+                OnReleaseTab?.Invoke();
             }
 
             HandleHeadBob();
@@ -321,12 +345,33 @@ namespace EasyPeasyFirstPersonController
             moveInput.x = Input.GetAxis("Horizontal");
             moveInput.y = Input.GetAxis("Vertical");
 
-            isSprinting = canSprint &&
-                          Input.GetKey(KeyCode.LeftShift) &&
-                          moveInput.y > 0.1f &&
-                          isGrounded &&
-                          !isCrouching &&
-                          !isSliding;
+            // --- STAMINA LOGIC START ---
+            bool wantsToSprint = Input.GetKey(KeyCode.LeftShift) &&
+                                 moveInput.y > 0.1f &&
+                                 isGrounded &&
+                                 !isCrouching &&
+                                 !isSliding;
+
+            if (canSprint && wantsToSprint && currentStamina > 0)
+            {
+                isSprinting = true;
+                currentStamina -= staminaDrainRate * Time.deltaTime;
+                lastSprintTime = Time.time;
+            }
+            else
+            {
+                isSprinting = false;
+
+                // Regenera se passou do tempo de delay
+                if (Time.time - lastSprintTime >= staminaRegenDelay && currentStamina < maxStamina)
+                {
+                    currentStamina += staminaRegenRate * Time.deltaTime;
+                }
+            }
+
+            // Garante que fique entre 0 e maxStamina
+            currentStamina = Mathf.Clamp(currentStamina, 0f, maxStamina);
+            // --- STAMINA LOGIC END ---
 
             float currentSpeed = isCrouching ? crouchSpeed : (isSprinting ? sprintSpeed : walkSpeed);
             if (!isMove) currentSpeed = 0f;

@@ -6,24 +6,23 @@ public class ClockPointerController : MonoBehaviour
     [Header("Configurações")]
     [SerializeField] private RectTransform ponteiro;
     [SerializeField] private RectTransform centroRelogio;
-    [SerializeField] private float raioCirculo = 100f; // Raio do círculo onde o ponteiro vai orbitar
+    [SerializeField] private float raioCirculo = 100f;
+    [SerializeField] private float offsetRotacao = 0f; // Offset adicionado aqui
 
     [Header("Opções")]
     [SerializeField] private bool suavizar = true;
     [SerializeField] private float velocidadeSuavizacao = 10f;
-    [SerializeField] private float distanciaMinima = 50f; // Distância mínima para considerar movimento
-    [SerializeField] private float multiplicadorSensibilidade = 2f; // Aumenta sensibilidade quando perto
-    [SerializeField] private bool manterPonteiroNoCirculo = true; // Se true, ponteiro fica sempre no círculo
+    [SerializeField] private float distanciaMinima = 50f;
+    [SerializeField] private float multiplicadorSensibilidade = 2f;
+    [SerializeField] private bool manterPonteiroNoCirculo = true;
 
     private Canvas canvas;
     private Camera cameraUI;
 
     void Start()
     {
-        // Obtém o Canvas pai
         canvas = GetComponentInParent<Canvas>();
 
-        // Define a câmera apropriada
         if (canvas.renderMode == RenderMode.ScreenSpaceOverlay)
         {
             cameraUI = null;
@@ -35,7 +34,6 @@ public class ClockPointerController : MonoBehaviour
                 cameraUI = Camera.main;
         }
 
-        // Se não especificou o centro, usa o objeto do ponteiro como referência
         if (centroRelogio == null)
             centroRelogio = ponteiro;
     }
@@ -47,10 +45,8 @@ public class ClockPointerController : MonoBehaviour
 
     void RotacionarPonteiroParaMouse()
     {
-        // Posição do mouse na tela
         Vector2 posicaoMouse = Input.mousePosition;
 
-        // Converte a posição do mouse para local space do pai do ponteiro
         Vector2 posicaoMouseLocal;
         RectTransformUtility.ScreenPointToLocalPointInRectangle(
             ponteiro.parent as RectTransform,
@@ -59,35 +55,24 @@ public class ClockPointerController : MonoBehaviour
             out posicaoMouseLocal
         );
 
-        // Posição local do centro do relógio relativa ao pai do ponteiro
         Vector2 posicaoCentroLocal = centroRelogio.anchoredPosition;
-
-        // Calcula a direção do centro para o mouse
         Vector2 direcao = posicaoMouseLocal - posicaoCentroLocal;
-
-        // Calcula a distância
         float distancia = direcao.magnitude;
 
-        // Se estiver muito perto, amplifica a direção para aumentar sensibilidade
         if (distancia < distanciaMinima && distancia > 0.1f)
         {
             float fatorAmplificacao = Mathf.Lerp(multiplicadorSensibilidade, 1f, distancia / distanciaMinima);
             direcao = direcao.normalized * (distancia * fatorAmplificacao);
         }
 
-        // Calcula o ângulo em graus
         float angulo = Mathf.Atan2(direcao.y, direcao.x) * Mathf.Rad2Deg;
 
-        // Ajusta o ângulo (Unity UI considera 0° para direita)
-        // Se quiser que 0° seja para cima, subtraia 90
         angulo -= 90f;
 
-        // Calcula a nova posição no círculo
         Vector2 novaPosicao;
         if (manterPonteiroNoCirculo)
         {
-            // Mantém o ponteiro sempre no raio do círculo
-            float anguloRad = (angulo + 90f) * Mathf.Deg2Rad; // Volta para radianos
+            float anguloRad = (angulo + 90f) * Mathf.Deg2Rad;
             novaPosicao = posicaoCentroLocal + new Vector2(
                 Mathf.Cos(anguloRad) * raioCirculo,
                 Mathf.Sin(anguloRad) * raioCirculo
@@ -95,7 +80,6 @@ public class ClockPointerController : MonoBehaviour
         }
         else
         {
-            // Segue o mouse até o raio máximo
             if (distancia > raioCirculo)
             {
                 novaPosicao = posicaoCentroLocal + direcao.normalized * raioCirculo;
@@ -106,18 +90,15 @@ public class ClockPointerController : MonoBehaviour
             }
         }
 
-        // Cria a rotação alvo
-        Quaternion rotacaoAlvo = Quaternion.Euler(0, 0, angulo);
+        // Aplica o offset apenas na rotação visual, sem afetar o cálculo da posição
+        Quaternion rotacaoAlvo = Quaternion.Euler(0, 0, angulo + offsetRotacao);
 
-        // Ajusta velocidade de suavização baseada na distância
         float velocidadeAjustada = velocidadeSuavizacao;
         if (distancia < distanciaMinima)
         {
-            // Aumenta velocidade quando está perto para resposta mais rápida
             velocidadeAjustada *= multiplicadorSensibilidade;
         }
 
-        // Aplica a rotação e posição (com ou sem suavização)
         if (suavizar)
         {
             ponteiro.rotation = Quaternion.Lerp(
