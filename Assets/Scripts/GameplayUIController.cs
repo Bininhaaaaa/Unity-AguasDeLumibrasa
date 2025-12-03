@@ -6,10 +6,10 @@ using UnityEngine.Rendering.HighDefinition;
 public class GameplayUIController : MonoBehaviour
 {
     public Camera gameplayCamera;
-
     public GameObject gameplayUI;
     public GameObject SniperAimUI;
     public GameObject CardSelectorUI;
+    public GameObject gunModel;
 
 
     void Start()
@@ -35,6 +35,7 @@ public class GameplayUIController : MonoBehaviour
     {
         gameplayUI.SetActive(true);
         SniperAimUI.SetActive(false);
+        gunModel.SetActive(true);
         gameplayCamera.fieldOfView = 60;
     }
 
@@ -42,6 +43,7 @@ public class GameplayUIController : MonoBehaviour
     {
         gameplayCamera.fieldOfView = 20;
         gameplayUI.SetActive(false);
+        gunModel.SetActive(false);
         SniperAimUI.SetActive(true);
     }
 
