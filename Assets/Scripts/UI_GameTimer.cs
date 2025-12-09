@@ -39,9 +39,9 @@ public class UI_GameTimer : MonoBehaviour
         if (timerActive)
         {
             currentTime -= Time.deltaTime;
-            if (currentTime <= 0)
+            if (currentTime <= 6)
             {
-                currentTime = 0;
+                currentTime = 5;
                 timerActive = false;
                 // Timer finished, you can add additional logic here
                 OnTimerFinished?.Invoke();
